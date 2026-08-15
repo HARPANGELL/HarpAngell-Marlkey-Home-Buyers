@@ -20,6 +20,7 @@ header{background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0
 .nav{display:flex;align-items:center;justify-content:space-between;padding:14px 0;gap:16px;flex-wrap:wrap}
 .logo{font-size:24px;font-weight:800;color:var(--navy);letter-spacing:-.5px}
 .logo span{color:var(--accent)}
+.logo img{height:74px;display:block}
 nav ul{display:flex;list-style:none;gap:22px;align-items:center;flex-wrap:wrap}
 nav a{font-weight:600;font-size:15px;color:var(--navy)}
 nav a:hover{color:var(--accent)}
