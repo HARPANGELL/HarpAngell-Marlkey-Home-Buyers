@@ -47,6 +47,30 @@
 <section><div class="container center prose"><h2 class="title">Hmm, that page doesn't exist.</h2>
       <p style="margin-bottom:20px">The page you're looking for may have moved.</p>
       <a class="btn" href="index.html">Back to Home</a></div></section>
+<script>
+(function(){
+  var map = [
+    ["/georgia/alpharetta", "/we-buy-houses-fulton-county-ga.html"],
+    ["/georgia/lawrenceville", "/we-buy-houses-gwinnett-county-ga.html"],
+    ["/georgia/", "/service-areas.html"],
+    ["/blog/how-to-stop-foreclosure-atlanta", "/stop-foreclosure.html"],
+    ["/blog/georgia-foreclosure-timeline", "/how-long-does-foreclosure-take-in-georgia.html"],
+    ["/blog", "/"],
+    ["/how-we-buy-houses", "/get-a-cash-offer.html"],
+    ["/our-company", "/about.html"],
+    ["/contact-us", "/contact.html"],
+    ["/get-a-cash-offer-today", "/get-a-cash-offer.html"],
+    ["/faq/", "/faq.html"],
+    ["/reviews/", "/reviews.html"]
+  ];
+  var p = location.pathname.toLowerCase();
+  for (var i=0;i<map.length;i++){
+    if (p === map[i][0] || p.indexOf(map[i][0] + "/") === 0 || p === map[i][0] + "/") {
+      location.replace(map[i][1]); return;
+    }
+  }
+})();
+</script>
 <footer>
   <div class="container">
     <div class="foot-grid">
