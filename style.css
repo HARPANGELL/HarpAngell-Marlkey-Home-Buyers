@@ -17,7 +17,7 @@ a{color:var(--navy);text-decoration:none}
 .topbar a{color:#fff;font-weight:600}
 /* header */
 header{background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50}
-.nav{display:flex;align-items:center;justify-content:space-between;padding:14px 0;gap:16px;flex-wrap:wrap}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;gap:16px;flex-wrap:wrap}
 .logo{font-size:24px;font-weight:800;color:var(--navy);letter-spacing:-.5px}
 .logo span{color:var(--accent)}
 .logo img{height:74px;display:block}
@@ -130,3 +130,50 @@ footer a:hover{color:#fff}
   .hero h1{font-size:32px}
   nav ul{gap:14px}
 }
+
+/* ===== Lead conversion (cards, Can't Sell band, lead form, mobile bar) ===== */
+.sit{display:flex;flex-direction:column}
+.sit p{flex:1}
+.sit h3 a{color:var(--navy)}
+.sit h3 a:hover{color:var(--accent)}
+.sit-cta{display:inline-block;align-self:flex-start;margin-top:14px;background:var(--accent);color:#fff !important;font-weight:700;font-size:14.5px;padding:10px 16px;border-radius:8px;transition:background .15s}
+.sit-cta:hover{background:var(--accent-dark)}
+.cant-sell{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-light) 100%);color:#fff;text-align:center;padding:64px 0}
+.cant-sell h2{font-size:34px;font-weight:800;letter-spacing:-.5px;margin-bottom:12px}
+.cant-sell p.lead{color:#D7E1F0;font-size:18px;max-width:760px;margin:0 auto 26px}
+.cant-sell .trust{margin-top:16px;font-size:14.5px;color:#AFC3DE}
+.cant-sell .trust a,.cant-sell .referral a{color:#fff;font-weight:700}
+.cant-sell .referral{margin-top:22px;font-size:15px;color:#D7E1F0}
+.cant-sell .referral a{text-decoration:underline}
+.page-hero .hero-cta{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-top:20px}
+.page-hero .hero-cta a.hero-phone{color:#fff;font-weight:700;text-decoration:underline}
+.cta-inline{background:#FFF4EF;border:1px solid #F9D2C2;border-radius:12px;padding:20px 22px;margin:22px 0}
+.cta-inline strong{display:block;color:var(--navy);font-size:18px;margin-bottom:6px}
+.prose .cta-inline p{margin-bottom:14px}
+.cta-inline .small{display:block;font-size:13px;color:var(--muted);margin-top:10px}
+.cta-inline .small a{color:var(--navy);font-weight:700}
+.mk-lead{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+.mk-lead[hidden]{display:none}
+.mk-lead-backdrop{position:absolute;inset:0;background:rgba(13,30,58,.62)}
+.mk-lead-dialog{position:relative;width:100%;max-width:480px;max-height:calc(100vh - 32px);overflow-y:auto}
+.mk-lead-x{position:absolute;top:8px;right:10px;background:none;border:none;font-size:30px;line-height:1;color:var(--muted);cursor:pointer;padding:4px 8px}
+.mk-lead-x:hover{color:var(--navy)}
+.mk-lead-step{font-size:12px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.form-card .mk-lead-next{margin-top:16px}
+.mk-lead-back{display:block;background:none;border:none;color:var(--navy);font-weight:600;font-size:14px;margin-top:8px;cursor:pointer;padding:4px 0}
+.mk-lead-fine{font-size:11.5px;color:var(--muted);margin-top:10px}
+.mk-lead-call{font-size:14px;color:var(--muted);margin-top:14px;text-align:center}
+.mk-lead-call a{font-weight:700;color:var(--navy)}
+.form-card .mk-lead-consent{font-size:11.5px;font-weight:400;color:var(--muted);margin:0;display:inline}
+.form-card .mk-lead-consent a{color:var(--navy)}
+html.mk-lead-open{overflow:hidden}
+.btn:focus-visible,.sit-cta:focus-visible,.mk-lead button:focus-visible,.mobile-cta a:focus-visible{outline:3px solid var(--navy);outline-offset:2px}
+.mobile-cta{display:none}
+@media(max-width:900px){
+  .mobile-cta{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:90;background:#fff;border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(0,0,0,.08);padding-bottom:env(safe-area-inset-bottom,0px)}
+  .mobile-cta a{flex:1;text-align:center;padding:15px 8px;font-weight:800;color:var(--navy);font-size:15px}
+  .mobile-cta a.go{background:var(--accent);color:#fff}
+  html.has-mobile-cta body{padding-bottom:56px}
+  .cant-sell h2{font-size:28px}
+}
+@media(max-width:900px){header{position:static}.logo img{height:60px}}
