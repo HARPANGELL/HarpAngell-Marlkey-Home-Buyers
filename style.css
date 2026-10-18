@@ -115,18 +115,57 @@ p.section-sub{color:var(--muted);font-size:17px;max-width:720px;margin-bottom:36
 .faq-item .body{padding:0 22px 18px;color:var(--muted);font-size:15.5px}
 /* footer */
 footer{background:var(--navy-dark);color:#B9C6DB;padding:52px 0 28px;font-size:14.5px}
-.foot-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:36px;margin-bottom:36px}
+.foot-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1fr;gap:32px;margin-bottom:36px}
 footer h4{color:#fff;font-size:15px;margin-bottom:14px;text-transform:uppercase;letter-spacing:1px}
 footer ul{list-style:none}
 footer li{margin-bottom:9px}
 footer a{color:#B9C6DB}
 footer a:hover{color:#fff}
 .foot-bottom{border-top:1px solid rgba(255,255,255,.12);padding-top:22px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:13px;color:#8FA1BC}
+/* states + geo */
+.state-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.state-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;position:relative}
+.state-card h3{color:var(--navy);font-size:20px;margin-bottom:4px}
+.state-card .metros{color:var(--muted);font-size:13.5px;margin-bottom:12px;min-height:40px}
+.state-card ul{list-style:none;font-size:14.5px;margin-bottom:14px}
+.state-card li{margin-bottom:6px}
+.state-card li a{color:var(--navy);font-weight:600}
+.state-card li a:hover{color:var(--accent)}
+.state-card .go{color:var(--accent);font-weight:700;font-size:15px}
+.state-card.geo-match{border:2px solid var(--accent);box-shadow:0 10px 30px rgba(242,107,58,.15)}
+.state-card.geo-match::before{content:"Your state";position:absolute;top:-11px;left:20px;background:var(--accent);color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;text-transform:uppercase;letter-spacing:.6px}
+.areas-title{color:var(--navy);font-size:16px;margin:30px 0 12px}
+.hero .geo-line{margin:-8px 0 22px;color:#D7E1F0;font-size:16px}
+.hero .geo-line a{color:#fff;text-decoration:underline;font-weight:700}
+.geo-banner{background:#FFF4EF;border-bottom:1px solid #F9D2C2;padding:12px 0;font-size:15px;color:var(--navy)}
+.geo-banner a{color:var(--accent-dark);font-weight:700}
+/* state guide pages */
+.prose .answer{background:#FFF4EF;border:1px solid #F9D2C2;border-radius:12px;padding:18px 20px;margin:0 0 22px;font-size:16.5px}
+.prose .answer strong:first-child{display:block;color:var(--accent-dark);text-transform:uppercase;font-size:12.5px;letter-spacing:1px;margin-bottom:4px}
+.prose ol{margin:0 0 16px 22px}
+.prose table.facts{width:100%;border-collapse:collapse;margin:8px 0 20px;font-size:15px;background:#fff}
+.prose table.facts th,.prose table.facts td{border:1px solid var(--line);padding:10px 12px;text-align:left;vertical-align:top}
+.prose table.facts th{background:var(--bg-soft);color:var(--navy)}
+.prose a{color:var(--accent-dark);text-decoration:underline}
+.prose .faq-item a{color:var(--accent-dark)}
+.related-links{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 18px}
+.related-links a{background:var(--bg-soft);border:1px solid var(--line);padding:8px 14px;border-radius:999px;font-size:14px;font-weight:600;color:var(--navy);text-decoration:none}
+.related-links a:hover{border-color:var(--accent);color:var(--accent)}
+.sources{font-size:13.5px;color:var(--muted)}
+.sources li{font-size:13.5px !important;margin-bottom:4px !important}
+.sources a{color:var(--muted) !important}
+.state-pick{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin:10px 0 22px}
+.state-pick a{display:block;background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;text-decoration:none;color:var(--navy);font-weight:700}
+.state-pick a span{display:block;font-weight:500;color:var(--muted);font-size:14px;margin-top:2px}
+.state-pick a:hover,.state-pick a.geo-match{border-color:var(--accent);box-shadow:0 6px 18px rgba(242,107,58,.12)}
+@media(min-width:901px){.two-col .form-card{position:sticky;top:120px}}
 /* responsive */
 @media(max-width:900px){
   .hero .container,.two-col{grid-template-columns:1fr}
   .grid3,.sit-grid{grid-template-columns:1fr}
+  .state-grid{grid-template-columns:1fr 1fr}
   .foot-grid{grid-template-columns:1fr 1fr}
   .hero h1{font-size:32px}
   nav ul{gap:14px}
 }
+@media(max-width:560px){.state-grid,.state-pick{grid-template-columns:1fr}.foot-grid{grid-template-columns:1fr}}
