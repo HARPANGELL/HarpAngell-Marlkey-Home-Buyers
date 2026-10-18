@@ -18,6 +18,61 @@
     "tired-landlord": "Tired landlord"
   };
   var page = (location.pathname.split("/").pop() || "index.html").replace(/\.html$/, "");
+  /* ---- Lead source tracking (all forms) + analytics events ----
+     Adds hidden fields to every FormSubmit form at submit time: UTM tags, Google/Microsoft/Meta
+     click IDs, first-touch source and landing page (kept 90 days in this browser), the page the
+     form was sent from, and a timestamp. Pushes events to window.dataLayer for Tag Manager / GA4:
+     form_start, lead_form_open, lead_form_step2, generate_lead, phone_click. */
+  var ATTR_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "gbraid", "wbraid", "msclkid", "fbclid"];
+  window.dataLayer = window.dataLayer || [];
+  function track(obj) { try { window.dataLayer.push(obj); } catch (e) {} }
+  function readStore(store, key) { try { return JSON.parse(store.getItem(key) || "null"); } catch (e) { return null; } }
+  function writeStore(store, key, val) { try { store.setItem(key, JSON.stringify(val)); } catch (e) {} }
+  function extRef() {
+    var r = document.referrer || "";
+    try { if (r && new URL(r).hostname === location.hostname) return ""; } catch (e) { return ""; }
+    return r;
+  }
+  function touches() {
+    var params = new URLSearchParams(location.search), now = {}, has = false;
+    ATTR_KEYS.forEach(function (k) { var v = params.get(k); if (v) { now[k] = v.slice(0, 200); has = true; } });
+    var first = readStore(localStorage, "mk_first");
+    if (!first || Date.now() - first.t > 90 * 864e5) {
+      first = { t: Date.now(), landing: location.pathname, referrer: extRef(), p: now };
+      writeStore(localStorage, "mk_first", first);
+    }
+    var last = readStore(sessionStorage, "mk_last");
+    if (has || !last) {
+      last = { landing: location.pathname, referrer: extRef(), p: now };
+      writeStore(sessionStorage, "mk_last", last);
+    }
+    return { first: first, last: last };
+  }
+  function sourceOf(t) {
+    var p = (t && t.p) || {};
+    if (p.gclid || p.gbraid || p.wbraid) return "Google Ads";
+    if (p.msclkid) return "Microsoft Ads";
+    if (p.fbclid) return "Facebook / Instagram";
+    if (p.utm_source) return p.utm_source + (p.utm_medium ? " / " + p.utm_medium : "");
+    if (t && t.referrer) { try { var h = new URL(t.referrer).hostname.replace(/^www\./, ""); return /google\.|bing\.|yahoo\.|duckduckgo\./.test(h) ? h + " (organic)" : h; } catch (e) {} }
+    return "Direct";
+  }
+  function stamp(form) {
+    var a = touches(), f = {};
+    ATTR_KEYS.forEach(function (k) { var v = (a.last.p || {})[k] || (a.first.p || {})[k]; if (v) f[k] = v; });
+    f.lead_source = sourceOf(a.last.p && Object.keys(a.last.p).length ? a.last : a.first);
+    f.first_touch_source = sourceOf(a.first);
+    f.first_landing_page = a.first.landing;
+    f.form_page = location.pathname;
+    f.submitted_at = new Date().toISOString();
+    Object.keys(f).forEach(function (k) {
+      var i = form.querySelector('input[name="' + k + '"]');
+      if (!i) { i = document.createElement("input"); i.type = "hidden"; i.name = k; form.appendChild(i); }
+      i.value = f[k];
+    });
+  }
+  function isLeadForm(f) { return f && f.tagName === "FORM" && /formsubmit\.co/.test(f.getAttribute("action") || ""); }
+
   var opener = null, modal, form, step1, step2;
 
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
@@ -106,7 +161,7 @@
     }
     return true;
   }
-  function next() { if (valid(step1)) show(2); }
+  function next() { if (valid(step1)) { show(2); track({ event: "lead_form_step2", lead_situation: modal.querySelector("#mk-lead-situation").value }); } }
   function show(n) {
     step1.hidden = n !== 1; step2.hidden = n !== 2;
     modal.querySelector(".mk-lead-step").textContent = "Step " + n + " of 2";
@@ -134,6 +189,7 @@
     modal.hidden = false;
     document.documentElement.classList.add("mk-lead-open");
     show(1);
+    track({ event: "lead_form_open", lead_situation: sel.value, lead_source_card: modal.querySelector("[name=lead_source_card]").value });
   }
   function close() {
     modal.hidden = true;
@@ -159,6 +215,25 @@
       open(b);
     });
     stickyBar();
+    touches();
+    document.addEventListener("submit", function (e) {
+      var f = e.target;
+      if (!isLeadForm(f) || e.defaultPrevented) return;
+      stamp(f);
+      var sit = f.querySelector("[name=situation]"), card = f.querySelector("[name=lead_source_card]");
+      track({ event: "generate_lead", form_type: f.closest(".mk-lead") ? "two_step_popup" : "page_form",
+              lead_situation: sit ? sit.value : "", lead_source_card: card ? card.value : "", form_page: location.pathname });
+    });
+    document.addEventListener("focusin", function (e) {
+      var f = e.target.form;
+      if (!isLeadForm(f) || f.getAttribute("data-started")) return;
+      f.setAttribute("data-started", "1");
+      track({ event: "form_start", form_type: f.closest(".mk-lead") ? "two_step_popup" : "page_form", form_page: location.pathname });
+    });
+    document.addEventListener("click", function (e) {
+      var a = e.target.closest('a[href^="tel:"]');
+      if (a) track({ event: "phone_click", link_location: a.closest(".mobile-cta") ? "mobile_bar" : a.closest("footer") ? "footer" : a.closest(".topbar") ? "top_bar" : "page" });
+    });
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
 })();

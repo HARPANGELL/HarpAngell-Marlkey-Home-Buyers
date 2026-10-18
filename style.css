@@ -177,3 +177,6 @@ html.mk-lead-open{overflow:hidden}
   .cant-sell h2{font-size:28px}
 }
 @media(max-width:900px){header{position:static}.logo img{height:60px}}
+
+/* keep the footer logo in proportion on narrow screens */
+footer .logo img{max-width:100%;object-fit:contain;object-position:left center}
