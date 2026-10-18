@@ -9,13 +9,14 @@
   var PHONE = "(678) 926-9776", TEL = "6789269776";
   var SITUATIONS = ["Facing foreclosure", "Behind on payments", "House in probate", "Inherited a house",
     "Title problems", "Tax liens / property debt", "Can't sell my house", "Going through divorce",
-    "Tired landlord", "Realtor or investor referral", "Other"];
+    "Tired landlord", "House needs major repairs", "Code violations", "Realtor or investor referral", "Other"];
   var PAGE_SITUATION = {
     "stop-foreclosure": "Facing foreclosure", "behind-on-payments": "Behind on payments",
     "sell-house-in-probate": "House in probate", "sell-inherited-house": "Inherited a house",
     "sell-house-with-title-problems": "Title problems", "sell-house-with-tax-liens": "Tax liens / property debt",
     "cant-sell-my-house": "Can't sell my house", "selling-during-divorce": "Going through divorce",
-    "tired-landlord": "Tired landlord"
+    "tired-landlord": "Tired landlord", "sell-house-needing-repairs": "House needs major repairs",
+    "sell-house-with-code-violations": "Code violations"
   };
   var page = (location.pathname.split("/").pop() || "index.html").replace(/\.html$/, "");
   /* ---- Lead source tracking (all forms) + analytics events ----
