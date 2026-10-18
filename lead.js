@@ -74,6 +74,77 @@
   }
   function isLeadForm(f) { return f && f.tagName === "FORM" && /formsubmit\.co/.test(f.getAttribute("action") || ""); }
 
+  /* ---- CRM: copy each lead to Zapier ("MarKey Website Leads to REISift" Zap), which creates the
+     property in REISift with list "Website Leads" and tags "Website Lead" + situation. The email
+     from FormSubmit still goes out as before; this is an extra copy, sent in the background. */
+  var CRM_HOOK = "https://hooks.zapier.com/hooks/catch/5793977/41a62sh/";
+  var STATES = { alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO", connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA", hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA", kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD", massachusetts: "MA", michigan: "MI", minnesota: "MN", mississippi: "MS", missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV", "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY", "north carolina": "NC", "north dakota": "ND", ohio: "OH", oklahoma: "OK", oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC", "south dakota": "SD", tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT", virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI", wyoming: "WY", "district of columbia": "DC" };
+  var SUFFIX = /\b(st|street|ave|avenue|rd|road|dr|drive|ln|lane|ct|court|blvd|boulevard|way|pl|place|cir|circle|pkwy|parkway|hwy|highway|trl|trail|ter|terrace|loop|run|pass|xing|crossing|sq|square|pt|point|row|walk|path|aly|alley)\b\.?(\s+\d+[a-z]?\b)?(\s+(ne|nw|se|sw|n|s|e|w)\b\.?)?(\s+(apt|unit|ste|suite|#)\s*[\w-]+)?/gi;
+  function splitAddress(raw) {
+    var out = { street: "", city: "", state: "", zip: "" };
+    var s = String(raw || "").replace(/\s+/g, " ").trim().replace(/[,\s]*(usa|united states)\.?$/i, "");
+    var m = s.match(/[,\s]+(\d{5})(-\d{4})?$/);
+    if (m) { out.zip = m[1]; s = s.slice(0, m.index); }
+    var names = Object.keys(STATES).sort(function (a, b) { return b.length - a.length; });
+    for (var i = 0; i < names.length; i++) {
+      var r = new RegExp("[,\\s]+" + names[i].replace(/ /g, "\\s+") + "\\.?$", "i");
+      if (r.test(s)) { out.state = STATES[names[i]]; s = s.replace(r, ""); break; }
+    }
+    if (!out.state) {
+      m = s.match(/[,\s]+([A-Za-z]{2})\.?$/);
+      var codes = Object.keys(STATES).map(function (k) { return STATES[k]; });
+      if (m && codes.indexOf(m[1].toUpperCase()) > -1) { out.state = m[1].toUpperCase(); s = s.slice(0, m.index); }
+    }
+    s = s.replace(/[,\s]+$/, "");
+    if (s.indexOf(",") > -1) {
+      out.street = s.slice(0, s.lastIndexOf(",")).trim();
+      out.city = s.slice(s.lastIndexOf(",") + 1).trim();
+    } else {
+      /* street ends at the first street-type word (St, Ave, Rd...), extended over any that follow
+         right after it ("Court St"); the rest is the city ("22 Main St East Point" -> East Point) */
+      var end = -1, x;
+      SUFFIX.lastIndex = 0;
+      while ((x = SUFFIX.exec(s))) {
+        if (end > -1 && !/^\s*$/.test(s.slice(end, x.index))) break;
+        end = x.index + x[0].length;
+      }
+      if (end > -1 && end < s.length) {
+        out.street = s.slice(0, end).trim();
+        out.city = s.slice(end).trim();
+      } else out.street = s;
+    }
+    return out;
+  }
+  function sendToCrm(form) {
+    try {
+      var hp = form.querySelector('[name="_honey"]');
+      if (hp && hp.value) return;
+      var d = {}, els = form.elements;
+      for (var i = 0; i < els.length; i++) {
+        var el = els[i];
+        if (!el.name || el.name.charAt(0) === "_" || el.disabled) continue;
+        if ((el.type === "checkbox" || el.type === "radio") && !el.checked) continue;
+        d[el.name] = String(el.value || "").slice(0, 2000);
+      }
+      if (!d.sms_consent) d.sms_consent = "no";
+      if (!d.situation) d.situation = "Situation not given";
+      var a = splitAddress(d.property_address);
+      d.property_street = a.street; d.property_city = a.city; d.property_state = a.state; d.property_zip = a.zip;
+      d.website = location.hostname;
+      var lines = ["Website lead (" + location.hostname + ")"];
+      [["Situation", "situation"], ["Timeline", "urgency"], ["Deadline", "deadline_date"], ["Who", "role"], ["Details", "details"],
+       ["Email", "email"], ["Phone", "phone"], ["SMS consent", "sms_consent"], ["Address as typed", "property_address"],
+       ["Lead source", "lead_source"], ["First touch", "first_touch_source"], ["First page", "first_landing_page"],
+       ["Form page", "form_page"], ["Button", "lead_source_card"], ["Campaign", "utm_campaign"], ["Keyword", "utm_term"],
+       ["Google click ID", "gclid"], ["Sent", "submitted_at"]].forEach(function (p) { if (d[p[1]]) lines.push(p[0] + ": " + d[p[1]]); });
+      d.crm_notes = lines.join("\n");
+      var body = new URLSearchParams(d);
+      if (!(navigator.sendBeacon && navigator.sendBeacon(CRM_HOOK, body))) {
+        fetch(CRM_HOOK, { method: "POST", mode: "no-cors", keepalive: true, body: body });
+      }
+    } catch (e) {}
+  }
+
   var opener = null, modal, form, step1, step2;
 
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
@@ -221,6 +292,7 @@
       var f = e.target;
       if (!isLeadForm(f) || e.defaultPrevented) return;
       stamp(f);
+      sendToCrm(f);
       var sit = f.querySelector("[name=situation]"), card = f.querySelector("[name=lead_source_card]");
       track({ event: "generate_lead", form_type: f.closest(".mk-lead") ? "two_step_popup" : "page_form",
               lead_situation: sit ? sit.value : "", lead_source_card: card ? card.value : "", form_page: location.pathname });
