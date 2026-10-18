@@ -4,7 +4,7 @@
    2. Swaps marked elements:
         data-geo-name            -> state name ("Texas")
         data-geo-text="...{state}..." -> text with {state} filled in
-        data-geo-href="hub|foreclosure|behind|taxliens|code" -> link to that state's page
+        data-geo-href="hub|foreclosure|behind|taxliens|code|title|inherited|auction" -> link to that state's page
         data-geo-show            -> shown only once a state is known (hidden attribute removed)
         data-geo-card="GA"       -> gets class "geo-match" when it is the visitor's state
    3. Adds hidden fields to every lead form: page, visitor state, UTM tags, gclid. */
@@ -17,7 +17,8 @@
   };
   var PAGES = {
     hub: "we-buy-houses-", foreclosure: "stop-foreclosure-", behind: "behind-on-mortgage-payments-",
-    taxliens: "sell-house-with-tax-liens-", code: "sell-house-with-code-violations-"
+    taxliens: "sell-house-with-tax-liens-", code: "sell-house-with-code-violations-",
+    title: "sell-house-with-title-problems-", inherited: "sell-inherited-house-", auction: "house-going-to-auction-"
   };
   var KEY = "mk_state", DAYS = 7;
   var params = new URLSearchParams(location.search);
