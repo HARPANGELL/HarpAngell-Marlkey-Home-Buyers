@@ -1,7 +1,9 @@
 /* MarKey lead form: a 2-step form that opens from any button with data-lead-open.
    Optional attributes on the button: data-situation, data-card, data-role.
-   Posts to the same FormSubmit endpoint and field names as the site's existing forms,
+   Uses the same FormSubmit inbox and field names as the site's existing forms,
    plus situation, urgency, deadline_date, role, lead_source_card and landing_page.
+   Every lead form on the site is sent from this script to Zapier (email + CRM), with FormSubmit
+   as the backup, then the visitor goes straight to the thank-you page.
    Also adds a sticky Call / Get My Cash Offer bar on phones. Without JavaScript the
    buttons fall back to their href (the existing cash offer page). */
 (function () {
@@ -74,10 +76,11 @@
   }
   function isLeadForm(f) { return f && f.tagName === "FORM" && /formsubmit\.co/.test(f.getAttribute("action") || ""); }
 
-  /* ---- CRM: copy each lead to Zapier ("MarKey Website Leads to REISift" Zap), which creates the
-     property in REISift with list "Website Leads" and tags "Website Lead" + situation. The email
-     from FormSubmit still goes out as before; this is an extra copy, sent in the background. */
-  var CRM_HOOK = "https://hooks.zapier.com/hooks/catch/5793977/41a62sh/";
+  /* ---- Every lead goes to Zapier (workflow "markey-website-leads"), which emails the lead to
+     contact@markeyhomebuyers.com and creates the property in DataSift (REISift) with list
+     "Website Leads" and tags "Website Lead" + situation. DataSift needs street, city, state and
+     ZIP; address_complete says whether all four were found in what was typed. */
+  var CRM_HOOK = "https://hooks.zapier.com/hooks/catch/5793977/Cy5ij2EtDVNe6Av92/";
   var STATES = { alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO", connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA", hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA", kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD", massachusetts: "MA", michigan: "MI", minnesota: "MN", mississippi: "MS", missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV", "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY", "north carolina": "NC", "north dakota": "ND", ohio: "OH", oklahoma: "OK", oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC", "south dakota": "SD", tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT", virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI", wyoming: "WY", "district of columbia": "DC" };
   var SUFFIX = /\b(st|street|ave|avenue|rd|road|dr|drive|ln|lane|ct|court|blvd|boulevard|way|pl|place|cir|circle|pkwy|parkway|hwy|highway|trl|trail|ter|terrace|loop|run|pass|xing|crossing|sq|square|pt|point|row|walk|path|aly|alley)\b\.?(\s+\d+[a-z]?\b)?(\s+(ne|nw|se|sw|n|s|e|w)\b\.?)?(\s+(apt|unit|ste|suite|#)\s*[\w-]+)?/gi;
   function splitAddress(raw) {
@@ -115,21 +118,35 @@
     }
     return out;
   }
+  /* POST without leaving the page. Resolves true when the other side accepted it, false if it was
+     refused or could not be sent at all (offline, or blocked by an extension). keepalive lets it
+     finish even after the visitor has moved on to the thank-you page. Pass readable=false for
+     endpoints that don't let the page read their answer; then true means "it was sent". */
+  function post(url, body, readable) {
+    try {
+      return fetch(url, { method: "POST", mode: readable ? "cors" : "no-cors", keepalive: true, body: body })
+        .then(function (r) { return readable ? r.ok : true; }, function () { return false; });
+    } catch (e) { return Promise.resolve(false); }
+  }
+  function fieldsOf(form, keepUnderscore) {
+    var d = {}, els = form.elements;
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (!el.name || el.disabled) continue;
+      if (!keepUnderscore && el.name.charAt(0) === "_") continue;
+      if ((el.type === "checkbox" || el.type === "radio") && !el.checked) continue;
+      d[el.name] = String(el.value || "").slice(0, 2000);
+    }
+    return d;
+  }
   function sendToCrm(form) {
     try {
-      var hp = form.querySelector('[name="_honey"]');
-      if (hp && hp.value) return;
-      var d = {}, els = form.elements;
-      for (var i = 0; i < els.length; i++) {
-        var el = els[i];
-        if (!el.name || el.name.charAt(0) === "_" || el.disabled) continue;
-        if ((el.type === "checkbox" || el.type === "radio") && !el.checked) continue;
-        d[el.name] = String(el.value || "").slice(0, 2000);
-      }
+      var d = fieldsOf(form, false);
       if (!d.sms_consent) d.sms_consent = "no";
       if (!d.situation) d.situation = "Situation not given";
       var a = splitAddress(d.property_address);
       d.property_street = a.street; d.property_city = a.city; d.property_state = a.state; d.property_zip = a.zip;
+      d.address_complete = a.street && a.city && a.state && a.zip ? "yes" : "no";
       d.website = location.hostname;
       var lines = ["Website lead (" + location.hostname + ")"];
       [["Situation", "situation"], ["Timeline", "urgency"], ["Deadline", "deadline_date"], ["Who", "role"], ["Details", "details"],
@@ -138,11 +155,59 @@
        ["Form page", "form_page"], ["Button", "lead_source_card"], ["Campaign", "utm_campaign"], ["Keyword", "utm_term"],
        ["Google click ID", "gclid"], ["Sent", "submitted_at"]].forEach(function (p) { if (d[p[1]]) lines.push(p[0] + ": " + d[p[1]]); });
       d.crm_notes = lines.join("\n");
-      var body = new URLSearchParams(d);
-      if (!(navigator.sendBeacon && navigator.sendBeacon(CRM_HOOK, body))) {
-        fetch(CRM_HOOK, { method: "POST", mode: "no-cors", keepalive: true, body: body });
-      }
-    } catch (e) {}
+      return post(CRM_HOOK, new URLSearchParams(d), true);
+    } catch (e) { return Promise.resolve(false); }
+  }
+  /* Backup only: if Zapier can't be reached, email the lead through FormSubmit's background endpoint
+     (same inbox as the form's action). The visitor never travels through formsubmit.co any more, so
+     a slow or down FormSubmit can't show them an error. */
+  function sendEmailCopy(form) {
+    try {
+      var d = fieldsOf(form, true);
+      delete d._next;
+      if (!d.sms_consent) d.sms_consent = "no";
+      var url = (form.getAttribute("action") || "").replace("formsubmit.co/", "formsubmit.co/ajax/");
+      return post(url, new URLSearchParams(d), false);
+    } catch (e) { return Promise.resolve(false); }
+  }
+  /* One gentle nudge when the address has no city, state or ZIP (the CRM needs all three to file the
+     property). It never blocks twice: a second click sends the lead with whatever was typed. */
+  function addressNudge(input) {
+    if (!input || input.getAttribute("data-nudged")) return false;
+    var a = splitAddress(input.value);
+    if (a.street && a.city && a.state && a.zip) return false;
+    input.setAttribute("data-nudged", "1");
+    note(input, "Please add the city, state and ZIP so we can find the property. Example: 123 Main St, Atlanta, GA 30303");
+    input.focus();
+    return true;
+  }
+  function note(after, text) {
+    var n = after.parentNode.querySelector(".mk-form-note");
+    if (!n) {
+      n = document.createElement("p");
+      n.className = "mk-form-note";
+      n.setAttribute("role", "alert");
+      n.style.cssText = "color:#b42318;font-size:13px;font-weight:600;margin:6px 0 0";
+      after.parentNode.insertBefore(n, after.nextSibling);
+    }
+    n.textContent = text;
+  }
+  function submitLead(f) {
+    var btn = f.querySelector('button[type="submit"]'), label = btn ? btn.innerHTML : "";
+    var nextEl = f.querySelector('[name="_next"]'), nextUrl = (nextEl && nextEl.value) || "/thank-you.html";
+    var hp = f.querySelector('[name="_honey"]'), done = false;
+    f.setAttribute("data-sending", "1");
+    if (btn) { btn.setAttribute("data-label", label); btn.disabled = true; btn.textContent = "Sending..."; }
+    function finish(ok) {
+      if (done) return;
+      done = true;
+      if (ok) { location.href = nextUrl; return; }
+      f.removeAttribute("data-sending");
+      if (btn) { btn.disabled = false; btn.innerHTML = label; note(btn, "We couldn't send this from your device. Please call or text " + PHONE + " and we'll take it from there."); }
+    }
+    if (hp && hp.value) { finish(true); return; }
+    sendToCrm(f).then(function (ok) { if (ok) finish(true); else sendEmailCopy(f).then(finish); });
+    setTimeout(function () { finish(true); }, 6000);
   }
 
   var opener = null, modal, form, step1, step2;
@@ -233,7 +298,7 @@
     }
     return true;
   }
-  function next() { if (valid(step1)) { show(2); track({ event: "lead_form_step2", lead_situation: modal.querySelector("#mk-lead-situation").value }); } }
+  function next() { if (valid(step1) && !addressNudge(step1.querySelector('[name="property_address"]'))) { show(2); track({ event: "lead_form_step2", lead_situation: modal.querySelector("#mk-lead-situation").value }); } }
   function show(n) {
     step1.hidden = n !== 1; step2.hidden = n !== 2;
     modal.querySelector(".mk-lead-step").textContent = "Step " + n + " of 2";
@@ -291,11 +356,25 @@
     document.addEventListener("submit", function (e) {
       var f = e.target;
       if (!isLeadForm(f) || e.defaultPrevented) return;
+      /* The form is sent from here, then the visitor goes to the thank-you page. Without JavaScript
+         the form still posts to its action as before. */
+      e.preventDefault();
+      if (f.getAttribute("data-sending")) return;
+      if (!f.closest(".mk-lead") && addressNudge(f.querySelector('[name="property_address"]'))) return;
       stamp(f);
-      sendToCrm(f);
       var sit = f.querySelector("[name=situation]"), card = f.querySelector("[name=lead_source_card]");
       track({ event: "generate_lead", form_type: f.closest(".mk-lead") ? "two_step_popup" : "page_form",
               lead_situation: sit ? sit.value : "", lead_source_card: card ? card.value : "", form_page: location.pathname });
+      submitLead(f);
+    });
+    /* coming back with the Back button: make the form usable again */
+    window.addEventListener("pageshow", function (e) {
+      if (!e.persisted) return;
+      Array.prototype.forEach.call(document.querySelectorAll("form[data-sending]"), function (f) {
+        f.removeAttribute("data-sending");
+        var b = f.querySelector('button[type="submit"]');
+        if (b) { b.disabled = false; if (b.getAttribute("data-label")) b.innerHTML = b.getAttribute("data-label"); }
+      });
     });
     document.addEventListener("focusin", function (e) {
       var f = e.target.form;
