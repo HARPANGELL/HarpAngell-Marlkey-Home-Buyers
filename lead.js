@@ -75,8 +75,10 @@
   }
   /* ---- Lead submit: every lead form posts to this Zapier webhook (the form's action attribute
      holds the same URL as a no-JavaScript fallback). On success the visitor goes to /thank-you.html;
-     on failure the form stays put and shows a call/text message. sms_consent is always sent as
-     "yes" or "no" (the checkbox is optional). */
+     on failure the form stays put and shows a call/text message. sms_consent (text opt-in) and
+     marketing_opt_out are always sent as "yes" or "no". Both boxes are optional and checking one
+     clears the other. The thank-you page lists what was submitted (kept in sessionStorage, this tab
+     only, never in the URL). */
   var LEAD_HOOK = "https://hooks.zapier.com/hooks/catch/5793977/Cy5ij2EtDVNe6Av92/";
   var THANK_YOU = "/thank-you.html";
   var TIMEOUT_MS = 15000;
@@ -126,14 +128,15 @@
       if ((el.type === "checkbox" || el.type === "radio") && !el.checked) continue;
       d[el.name] = String(el.value || "").slice(0, 2000);
     }
-    d.sms_consent = d.sms_consent === "yes" ? "yes" : "no";
+    d.marketing_opt_out = d.marketing_opt_out === "yes" ? "yes" : "no";
+    d.sms_consent = d.sms_consent === "yes" && d.marketing_opt_out !== "yes" ? "yes" : "no";
     if (!d.situation) d.situation = "Situation not given";
     var a = splitAddress(d.property_address);
     d.property_street = a.street; d.property_city = a.city; d.property_state = a.state; d.property_zip = a.zip;
     d.website = location.hostname;
     var lines = ["Website lead (" + location.hostname + ")"];
     [["Situation", "situation"], ["Timeline", "urgency"], ["Deadline", "deadline_date"], ["Who", "role"], ["Details", "details"],
-     ["Email", "email"], ["Phone", "phone"], ["SMS consent", "sms_consent"], ["Address as typed", "property_address"],
+     ["Email", "email"], ["Phone", "phone"], ["SMS consent", "sms_consent"], ["Marketing opt-out", "marketing_opt_out"], ["Address as typed", "property_address"],
      ["Lead source", "lead_source"], ["First touch", "first_touch_source"], ["First page", "first_landing_page"],
      ["Form page", "form_page"], ["Button", "lead_source_card"], ["Campaign", "utm_campaign"], ["Keyword", "utm_term"],
      ["Google click ID", "gclid"], ["Sent", "submitted_at"]].forEach(function (p) { if (d[p[1]]) lines.push(p[0] + ": " + d[p[1]]); });
@@ -153,6 +156,37 @@
     }
     p.hidden = false;
   }
+  /* What the visitor sent, shown back on the thank-you page as a last check */
+  function saveSummary(b) {
+    try {
+      var g = function (k) { return String(b.get(k) || "").trim(); };
+      var sit = g("situation");
+      sessionStorage.setItem("mk_submitted", JSON.stringify({
+        name: [g("first_name"), g("last_name")].filter(Boolean).join(" "), phone: g("phone"), email: g("email"),
+        address: g("property_address"), situation: sit === "Situation not given" ? "" : sit,
+        sms: g("sms_consent"), optout: g("marketing_opt_out") }));
+    } catch (e) {}
+  }
+  function showSummary() {
+    var box = document.getElementById("mk-submitted"), s = null;
+    if (!box) return;
+    try { s = JSON.parse(sessionStorage.getItem("mk_submitted") || "null"); } catch (e) {}
+    if (!s) return;
+    var pref = s.sms === "yes" ? "Opted in to text messages" :
+      s.optout === "yes" ? "Opted out of marketing calls and texts" : "No preference selected";
+    var list = box.querySelector("ul");
+    [["Name", s.name], ["Phone", s.phone], ["Email", s.email], ["Property address", s.address],
+     ["What's going on", s.situation], ["Contact preference", pref]].forEach(function (r) {
+      if (!r[1]) return;
+      var li = document.createElement("li"), b = document.createElement("strong");
+      b.textContent = r[0] + ": ";
+      li.appendChild(b); li.appendChild(document.createTextNode(r[1]));
+      list.appendChild(li);
+    });
+    box.hidden = false;
+    var alt = document.getElementById("mk-cant-wait");
+    if (alt) alt.hidden = true;
+  }
   function submitLead(f) {
     if (f.getAttribute("data-sending")) return;
     var btn = f.querySelector('[type="submit"]'), err = f.querySelector(".mk-form-error");
@@ -162,7 +196,8 @@
     var body;
     try { body = payload(f); } catch (e) {
       body = new URLSearchParams(new FormData(f));
-      body.set("sms_consent", body.get("sms_consent") === "yes" ? "yes" : "no");
+      body.set("marketing_opt_out", body.get("marketing_opt_out") === "yes" ? "yes" : "no");
+      body.set("sms_consent", body.get("sms_consent") === "yes" && body.get("marketing_opt_out") !== "yes" ? "yes" : "no");
     }
     f.setAttribute("data-sending", "1");
     if (btn) btn.disabled = true;
@@ -177,6 +212,7 @@
     }
     function ok() {
       clearTimeout(timer);
+      saveSummary(body);
       var sit = f.querySelector("[name=situation]"), card = f.querySelector("[name=lead_source_card]"), went = false;
       function go() { if (!went) { went = true; location.href = THANK_YOU; } }
       track({ event: "generate_lead", form_type: formType(f), lead_situation: sit ? sit.value : "",
@@ -239,6 +275,8 @@
             '<textarea id="mk-lead-details" name="details" rows="3" placeholder="Anything that helps us understand the situation"></textarea>' +
             '<div class="consent"><input id="mk-lead-sms" type="checkbox" name="sms_consent" value="yes">' +
               '<label for="mk-lead-sms" class="mk-lead-consent">By checking this box, I consent to receive conversational and informational text messages from MarKey Home Buyers regarding my inquiry, property evaluation, appointment scheduling, and account-related updates. Message frequency may vary. Message &amp; data rates may apply. Reply STOP to opt out at any time and HELP for assistance. Consent is not a condition of purchase. View our <a href="privacy.html">Privacy Policy</a>, <a href="terms.html">Terms &amp; Conditions</a> &amp; <a href="sms-policy.html">SMS Policy</a>.</label></div>' +
+            '<div class="consent"><input id="mk-lead-optout" type="checkbox" name="marketing_opt_out" value="yes">' +
+              '<label for="mk-lead-optout" class="mk-lead-consent">No marketing, please. Don&rsquo;t send me marketing calls or texts. Only contact me about this request.</label></div>' +
             '<button type="submit" class="btn">See If We Can Help &rarr;</button>' +
             '<p class="mk-lead-fine">By submitting, you agree MarKey Home Buyers may contact you by phone or email about this property. You can opt out at any time.</p>' +
             '<button type="button" class="mk-lead-back">&larr; Back</button>' +
@@ -331,6 +369,14 @@
     });
     stickyBar();
     touches();
+    if (page === "thank-you") showSummary();
+    /* Text opt-in and marketing opt-out: pick one (or neither). Checking one clears the other. */
+    document.addEventListener("change", function (e) {
+      var c = e.target, other = { sms_consent: "marketing_opt_out", marketing_opt_out: "sms_consent" }[c.name];
+      if (!other || !c.checked || !isLeadForm(c.form)) return;
+      var o = c.form.querySelector('[name="' + other + '"]');
+      if (o) o.checked = false;
+    });
     document.addEventListener("submit", function (e) {
       var f = e.target;
       if (!isLeadForm(f) || e.defaultPrevented) return;
