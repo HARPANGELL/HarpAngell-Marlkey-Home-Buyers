@@ -1,7 +1,8 @@
 /* MarKey lead form: a 2-step form that opens from any button with data-lead-open.
    Optional attributes on the button: data-situation, data-card, data-role.
-   Posts to the same FormSubmit endpoint and field names as the site's existing forms,
-   plus situation, urgency, deadline_date, role, lead_source_card and landing_page.
+   Uses the same field names as the site's page forms, plus situation, urgency, deadline_date,
+   role, lead_source_card and landing_page. Every lead form (page forms + this popup) is sent
+   to the Zapier webhook below (see submitLead).
    Also adds a sticky Call / Get My Cash Offer bar on phones. Without JavaScript the
    buttons fall back to their href (the existing cash offer page). */
 (function () {
@@ -20,7 +21,7 @@
   };
   var page = (location.pathname.split("/").pop() || "index.html").replace(/\.html$/, "");
   /* ---- Lead source tracking (all forms) + analytics events ----
-     Adds hidden fields to every FormSubmit form at submit time: UTM tags, Google/Microsoft/Meta
+     Adds hidden fields to every lead form at submit time: UTM tags, Google/Microsoft/Meta
      click IDs, first-touch source and landing page (kept 90 days in this browser), the page the
      form was sent from, and a timestamp. Pushes events to window.dataLayer for Tag Manager / GA4:
      form_start, lead_form_open, lead_form_step2, generate_lead, phone_click. */
@@ -72,12 +73,14 @@
       i.value = f[k];
     });
   }
-  function isLeadForm(f) { return f && f.tagName === "FORM" && /formsubmit\.co/.test(f.getAttribute("action") || ""); }
-
-  /* ---- CRM: copy each lead to Zapier ("MarKey Website Leads to REISift" Zap), which creates the
-     property in REISift with list "Website Leads" and tags "Website Lead" + situation. The email
-     from FormSubmit still goes out as before; this is an extra copy, sent in the background. */
-  var CRM_HOOK = "https://hooks.zapier.com/hooks/catch/5793977/41a62sh/";
+  /* ---- Lead submit: every lead form posts to this Zapier webhook (the form's action attribute
+     holds the same URL as a no-JavaScript fallback). On success the visitor goes to /thank-you.html;
+     on failure the form stays put and shows a call/text message. sms_consent is always sent as
+     "yes" or "no" (the checkbox is optional). */
+  var LEAD_HOOK = "https://hooks.zapier.com/hooks/catch/PASTE/ZAPIER_URL/";
+  var THANK_YOU = "/thank-you.html";
+  var TIMEOUT_MS = 15000;
+  function isLeadForm(f) { return f && f.tagName === "FORM" && /hooks\.zapier\.com|formsubmit\.co/.test(f.getAttribute("action") || ""); }
   var STATES = { alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO", connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA", hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA", kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD", massachusetts: "MA", michigan: "MI", minnesota: "MN", mississippi: "MS", missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV", "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY", "north carolina": "NC", "north dakota": "ND", ohio: "OH", oklahoma: "OK", oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC", "south dakota": "SD", tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT", virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI", wyoming: "WY", "district of columbia": "DC" };
   var SUFFIX = /\b(st|street|ave|avenue|rd|road|dr|drive|ln|lane|ct|court|blvd|boulevard|way|pl|place|cir|circle|pkwy|parkway|hwy|highway|trl|trail|ter|terrace|loop|run|pass|xing|crossing|sq|square|pt|point|row|walk|path|aly|alley)\b\.?(\s+\d+[a-z]?\b)?(\s+(ne|nw|se|sw|n|s|e|w)\b\.?)?(\s+(apt|unit|ste|suite|#)\s*[\w-]+)?/gi;
   function splitAddress(raw) {
@@ -115,34 +118,77 @@
     }
     return out;
   }
-  function sendToCrm(form) {
+  function payload(form) {
+    var d = {}, els = form.elements;
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (!el.name || el.name.charAt(0) === "_" || el.disabled) continue;
+      if ((el.type === "checkbox" || el.type === "radio") && !el.checked) continue;
+      d[el.name] = String(el.value || "").slice(0, 2000);
+    }
+    d.sms_consent = d.sms_consent === "yes" ? "yes" : "no";
+    if (!d.situation) d.situation = "Situation not given";
+    var a = splitAddress(d.property_address);
+    d.property_street = a.street; d.property_city = a.city; d.property_state = a.state; d.property_zip = a.zip;
+    d.website = location.hostname;
+    var lines = ["Website lead (" + location.hostname + ")"];
+    [["Situation", "situation"], ["Timeline", "urgency"], ["Deadline", "deadline_date"], ["Who", "role"], ["Details", "details"],
+     ["Email", "email"], ["Phone", "phone"], ["SMS consent", "sms_consent"], ["Address as typed", "property_address"],
+     ["Lead source", "lead_source"], ["First touch", "first_touch_source"], ["First page", "first_landing_page"],
+     ["Form page", "form_page"], ["Button", "lead_source_card"], ["Campaign", "utm_campaign"], ["Keyword", "utm_term"],
+     ["Google click ID", "gclid"], ["Sent", "submitted_at"]].forEach(function (p) { if (d[p[1]]) lines.push(p[0] + ": " + d[p[1]]); });
+    d.crm_notes = lines.join("\n");
+    return new URLSearchParams(d);
+  }
+  function formType(f) { return f.closest(".mk-lead") ? "two_step_popup" : "page_form"; }
+  function showError(f, btn) {
+    var p = f.querySelector(".mk-form-error");
+    if (!p) {
+      p = document.createElement("p");
+      p.className = "mk-form-error";
+      p.setAttribute("role", "alert");
+      p.style.cssText = "margin:12px 0 0;font-weight:700";
+      p.innerHTML = 'Something went wrong. Call or text <a href="tel:' + TEL + '" style="white-space:nowrap">' + PHONE + '</a>';
+      if (btn) btn.insertAdjacentElement("afterend", p); else f.appendChild(p);
+    }
+    p.hidden = false;
+  }
+  function submitLead(f) {
+    if (f.getAttribute("data-sending")) return;
+    var btn = f.querySelector('[type="submit"]'), err = f.querySelector(".mk-form-error");
+    if (err) err.hidden = true;
+    var hp = f.querySelector('[name="_honey"]');
+    if (hp && hp.value) { location.href = THANK_YOU; return; }
+    var body;
+    try { body = payload(f); } catch (e) {
+      body = new URLSearchParams(new FormData(f));
+      body.set("sms_consent", body.get("sms_consent") === "yes" ? "yes" : "no");
+    }
+    f.setAttribute("data-sending", "1");
+    if (btn) btn.disabled = true;
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, TIMEOUT_MS);
+    function fail(why) {
+      clearTimeout(timer);
+      f.removeAttribute("data-sending");
+      if (btn) btn.disabled = false;
+      showError(f, btn);
+      track({ event: "lead_submit_error", form_type: formType(f), error: String(why).slice(0, 100), form_page: location.pathname });
+    }
+    function ok() {
+      clearTimeout(timer);
+      var sit = f.querySelector("[name=situation]"), card = f.querySelector("[name=lead_source_card]"), went = false;
+      function go() { if (!went) { went = true; location.href = THANK_YOU; } }
+      track({ event: "generate_lead", form_type: formType(f), lead_situation: sit ? sit.value : "",
+              lead_source_card: card ? card.value : "", form_page: location.pathname,
+              eventCallback: go, eventTimeout: 1500 });
+      setTimeout(go, 1200);
+    }
     try {
-      var hp = form.querySelector('[name="_honey"]');
-      if (hp && hp.value) return;
-      var d = {}, els = form.elements;
-      for (var i = 0; i < els.length; i++) {
-        var el = els[i];
-        if (!el.name || el.name.charAt(0) === "_" || el.disabled) continue;
-        if ((el.type === "checkbox" || el.type === "radio") && !el.checked) continue;
-        d[el.name] = String(el.value || "").slice(0, 2000);
-      }
-      if (!d.sms_consent) d.sms_consent = "no";
-      if (!d.situation) d.situation = "Situation not given";
-      var a = splitAddress(d.property_address);
-      d.property_street = a.street; d.property_city = a.city; d.property_state = a.state; d.property_zip = a.zip;
-      d.website = location.hostname;
-      var lines = ["Website lead (" + location.hostname + ")"];
-      [["Situation", "situation"], ["Timeline", "urgency"], ["Deadline", "deadline_date"], ["Who", "role"], ["Details", "details"],
-       ["Email", "email"], ["Phone", "phone"], ["SMS consent", "sms_consent"], ["Address as typed", "property_address"],
-       ["Lead source", "lead_source"], ["First touch", "first_touch_source"], ["First page", "first_landing_page"],
-       ["Form page", "form_page"], ["Button", "lead_source_card"], ["Campaign", "utm_campaign"], ["Keyword", "utm_term"],
-       ["Google click ID", "gclid"], ["Sent", "submitted_at"]].forEach(function (p) { if (d[p[1]]) lines.push(p[0] + ": " + d[p[1]]); });
-      d.crm_notes = lines.join("\n");
-      var body = new URLSearchParams(d);
-      if (!(navigator.sendBeacon && navigator.sendBeacon(CRM_HOOK, body))) {
-        fetch(CRM_HOOK, { method: "POST", mode: "no-cors", keepalive: true, body: body });
-      }
-    } catch (e) {}
+      /* URLSearchParams body = form-encoded "simple" request, so no CORS preflight */
+      fetch(LEAD_HOOK, { method: "POST", body: body, signal: ctrl ? ctrl.signal : undefined })
+        .then(function (r) { if (r.ok) ok(); else fail("HTTP " + r.status); }, function (e) { fail(e && e.name || "network"); });
+    } catch (e) { fail("fetch unavailable"); }
   }
 
   var opener = null, modal, form, step1, step2;
@@ -161,10 +207,7 @@
         '<p class="mk-lead-step" aria-live="polite">Step 1 of 2</p>' +
         '<h3 id="mk-lead-title">Tell us about the property</h3>' +
         '<p class="sub">Confidential. No obligation. No fees.</p>' +
-        '<form action="https://formsubmit.co/contact@markeyhomebuyers.com" method="POST" novalidate>' +
-          '<input type="hidden" name="_subject" value="NEW SELLER LEAD - markeyhomebuyers.com">' +
-          '<input type="hidden" name="_next" value="https://markeyhomebuyers.com/thank-you.html">' +
-          '<input type="hidden" name="_template" value="table">' +
+        '<form action="' + LEAD_HOOK + '" method="POST" novalidate>' +
           '<input type="hidden" name="lead_source_card" value="">' +
           '<input type="hidden" name="landing_page" value="">' +
           '<div class="mk-lead-s1">' +
@@ -291,11 +334,9 @@
     document.addEventListener("submit", function (e) {
       var f = e.target;
       if (!isLeadForm(f) || e.defaultPrevented) return;
-      stamp(f);
-      sendToCrm(f);
-      var sit = f.querySelector("[name=situation]"), card = f.querySelector("[name=lead_source_card]");
-      track({ event: "generate_lead", form_type: f.closest(".mk-lead") ? "two_step_popup" : "page_form",
-              lead_situation: sit ? sit.value : "", lead_source_card: card ? card.value : "", form_page: location.pathname });
+      e.preventDefault();
+      try { stamp(f); } catch (err) {}
+      submitLead(f);
     });
     document.addEventListener("focusin", function (e) {
       var f = e.target.form;
