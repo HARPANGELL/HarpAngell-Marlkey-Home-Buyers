@@ -197,7 +197,7 @@
     var nextEl = f.querySelector('[name="_next"]'), nextUrl = (nextEl && nextEl.value) || "/thank-you.html";
     var hp = f.querySelector('[name="_honey"]'), done = false;
     f.setAttribute("data-sending", "1");
-    if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+    if (btn) { btn.setAttribute("data-label", label); btn.disabled = true; btn.textContent = "Sending..."; }
     function finish(ok) {
       if (done) return;
       done = true;
