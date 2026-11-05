@@ -2,8 +2,8 @@
    Optional attributes on the button: data-situation, data-card, data-role.
    Uses the same FormSubmit inbox and field names as the site's existing forms,
    plus situation, urgency, deadline_date, role, lead_source_card and landing_page.
-   Every lead form on the site is sent from this script: one copy to the CRM (Zapier), one to
-   the email inbox (FormSubmit), then the visitor goes straight to the thank-you page.
+   Every lead form on the site is sent from this script to Zapier (email + CRM), with FormSubmit
+   as the backup, then the visitor goes straight to the thank-you page.
    Also adds a sticky Call / Get My Cash Offer bar on phones. Without JavaScript the
    buttons fall back to their href (the existing cash offer page). */
 (function () {
@@ -76,10 +76,11 @@
   }
   function isLeadForm(f) { return f && f.tagName === "FORM" && /formsubmit\.co/.test(f.getAttribute("action") || ""); }
 
-  /* ---- CRM: copy each lead to Zapier ("MarKey Website Leads to REISift" Zap), which creates the
-     property in REISift with list "Website Leads" and tags "Website Lead" + situation.
-     address_complete says whether street, city, state and ZIP were all found in what was typed. */
-  var CRM_HOOK = "https://hooks.zapier.com/hooks/catch/5793977/41a62sh/";
+  /* ---- Every lead goes to Zapier (workflow "markey-website-leads"), which emails the lead to
+     contact@markeyhomebuyers.com and creates the property in DataSift (REISift) with list
+     "Website Leads" and tags "Website Lead" + situation. DataSift needs street, city, state and
+     ZIP; address_complete says whether all four were found in what was typed. */
+  var CRM_HOOK = "https://hooks.zapier.com/hooks/catch/5793977/Cy5ij2EtDVNe6Av92/";
   var STATES = { alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO", connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA", hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA", kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD", massachusetts: "MA", michigan: "MI", minnesota: "MN", mississippi: "MS", missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV", "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY", "north carolina": "NC", "north dakota": "ND", ohio: "OH", oklahoma: "OK", oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC", "south dakota": "SD", tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT", virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI", wyoming: "WY", "district of columbia": "DC" };
   var SUFFIX = /\b(st|street|ave|avenue|rd|road|dr|drive|ln|lane|ct|court|blvd|boulevard|way|pl|place|cir|circle|pkwy|parkway|hwy|highway|trl|trail|ter|terrace|loop|run|pass|xing|crossing|sq|square|pt|point|row|walk|path|aly|alley)\b\.?(\s+\d+[a-z]?\b)?(\s+(ne|nw|se|sw|n|s|e|w)\b\.?)?(\s+(apt|unit|ste|suite|#)\s*[\w-]+)?/gi;
   function splitAddress(raw) {
@@ -117,13 +118,14 @@
     }
     return out;
   }
-  /* POST without leaving the page. Resolves true once the request has left the browser, false if it
-     could not be sent at all (offline, or blocked by an extension). keepalive lets it finish even
-     after the visitor has moved on to the thank-you page. */
-  function post(url, body) {
+  /* POST without leaving the page. Resolves true when the other side accepted it, false if it was
+     refused or could not be sent at all (offline, or blocked by an extension). keepalive lets it
+     finish even after the visitor has moved on to the thank-you page. Pass readable=false for
+     endpoints that don't let the page read their answer; then true means "it was sent". */
+  function post(url, body, readable) {
     try {
-      return fetch(url, { method: "POST", mode: "no-cors", keepalive: true, body: body })
-        .then(function () { return true; }, function () { return false; });
+      return fetch(url, { method: "POST", mode: readable ? "cors" : "no-cors", keepalive: true, body: body })
+        .then(function (r) { return readable ? r.ok : true; }, function () { return false; });
     } catch (e) { return Promise.resolve(false); }
   }
   function fieldsOf(form, keepUnderscore) {
@@ -153,18 +155,19 @@
        ["Form page", "form_page"], ["Button", "lead_source_card"], ["Campaign", "utm_campaign"], ["Keyword", "utm_term"],
        ["Google click ID", "gclid"], ["Sent", "submitted_at"]].forEach(function (p) { if (d[p[1]]) lines.push(p[0] + ": " + d[p[1]]); });
       d.crm_notes = lines.join("\n");
-      return post(CRM_HOOK, new URLSearchParams(d));
+      return post(CRM_HOOK, new URLSearchParams(d), true);
     } catch (e) { return Promise.resolve(false); }
   }
-  /* Email copy through FormSubmit's background endpoint (same inbox as the form's action). The visitor
-     no longer travels through formsubmit.co, so a slow or down FormSubmit can't show them an error. */
+  /* Backup only: if Zapier can't be reached, email the lead through FormSubmit's background endpoint
+     (same inbox as the form's action). The visitor never travels through formsubmit.co any more, so
+     a slow or down FormSubmit can't show them an error. */
   function sendEmailCopy(form) {
     try {
       var d = fieldsOf(form, true);
       delete d._next;
       if (!d.sms_consent) d.sms_consent = "no";
       var url = (form.getAttribute("action") || "").replace("formsubmit.co/", "formsubmit.co/ajax/");
-      return post(url, new URLSearchParams(d));
+      return post(url, new URLSearchParams(d), false);
     } catch (e) { return Promise.resolve(false); }
   }
   /* One gentle nudge when the address has no city, state or ZIP (the CRM needs all three to file the
@@ -203,9 +206,8 @@
       if (btn) { btn.disabled = false; btn.innerHTML = label; note(btn, "We couldn't send this from your device. Please call or text " + PHONE + " and we'll take it from there."); }
     }
     if (hp && hp.value) { finish(true); return; }
-    var crm = sendToCrm(f), mail = sendEmailCopy(f);
-    crm.then(function (ok) { if (ok) finish(true); else mail.then(finish); });
-    setTimeout(function () { finish(true); }, 5000);
+    sendToCrm(f).then(function (ok) { if (ok) finish(true); else sendEmailCopy(f).then(finish); });
+    setTimeout(function () { finish(true); }, 6000);
   }
 
   var opener = null, modal, form, step1, step2;
