@@ -77,7 +77,7 @@
      holds the same URL as a no-JavaScript fallback). On success the visitor goes to /thank-you.html;
      on failure the form stays put and shows a call/text message. sms_consent is always sent as
      "yes" or "no" (the checkbox is optional). */
-  var LEAD_HOOK = "https://hooks.zapier.com/hooks/catch/PASTE/ZAPIER_URL/";
+  var LEAD_HOOK = "https://hooks.zapier.com/hooks/catch/5793977/Cy5ij2EtDVNe6Av92/";
   var THANK_YOU = "/thank-you.html";
   var TIMEOUT_MS = 15000;
   function isLeadForm(f) { return f && f.tagName === "FORM" && /hooks\.zapier\.com|formsubmit\.co/.test(f.getAttribute("action") || ""); }
